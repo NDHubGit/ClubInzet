@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="ci" x1="120" y1="96" x2="392" y2="416" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <!-- Donker navy, afgerond vierkant -->
+  <rect width="512" height="512" rx="112" fill="#0f172a"/>
+  <!-- Cirkel met gradient (basis voor check) -->
+  <circle cx="256" cy="208" r="100" fill="url(#ci)"/>
+  <!-- Checkmark binnen de cirkel -->
+  <path
+    d="M214 212 L246 252 L312 176"
+    stroke="#f8fafc"
+    stroke-width="26"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Smile / boog onderin -->
+  <path
+    d="M120 336 Q256 424 392 336"
+    stroke="url(#ci)"
+    stroke-width="36"
+    stroke-linecap="round"
+    fill="none"
+  />
+</svg>

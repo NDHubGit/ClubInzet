@@ -1,0 +1,12 @@
+node_modules
+.next
+.env
+.env*.local
+npm-debug.log*
+
+# next-pwa (gegenereerd bij build)
+public/sw.js
+public/workbox-*.js
+public/worker-*.js
+public/fallback-*.js
+
