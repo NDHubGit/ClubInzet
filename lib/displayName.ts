@@ -3,6 +3,8 @@
  * `email` mag intern gebruikt worden om een prefix (voor @) af te leiden.
  */
 
+import { displayNameForProfile } from "@/lib/admin/aggregateMembers";
+
 export type ProfileLike = {
   id?: string | null;
   /** Optioneel apart veld; anders display_name / e-mailprefix */
@@ -63,4 +65,31 @@ export function getDisplayName(
 export function publicProfileLabel(displayName: string | null | undefined): string {
   const d = displayName?.trim();
   return d ? capitalizeFirst(d) : "Gebruiker";
+}
+
+/**
+ * Klassement / leaderboard: zelfde prioriteit als admin-ledenexport (`displayNameForProfile`).
+ * Fallback “Gebruiker” i.p.v. “Onbekend” voor consistentie met de rest van de app.
+ */
+export function leaderboardParticipantName(
+  profile: ProfileLike | null | undefined,
+  currentUserId: string | null | undefined
+): string {
+  const raw = displayNameForProfile({
+    id: String(profile?.id ?? ""),
+    email: profile?.email ?? null,
+    name: profile?.name ?? null,
+    display_name: profile?.display_name ?? null,
+    first_name: profile?.first_name ?? null,
+    last_name: profile?.last_name ?? null,
+  });
+  const base = raw === "Onbekend" ? "Gebruiker" : raw;
+  if (
+    profile?.id != null &&
+    currentUserId != null &&
+    String(profile.id) === String(currentUserId)
+  ) {
+    return `${base} (jij)`;
+  }
+  return base;
 }

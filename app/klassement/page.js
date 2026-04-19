@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { fetchOrCreateClientProfile } from "@/lib/auth/clientProfile";
-import { getDisplayName } from "@/lib/displayName";
+import { leaderboardParticipantName } from "@/lib/displayName";
 import { buildLeaderboardFromTasks } from "@/lib/leaderboard/buildLeaderboardFromTasks";
+import { fetchLeaderboardProfilesForIds } from "@/lib/leaderboard/fetchLeaderboardProfiles";
 import { getSupabase } from "@/lib/supabase";
 import { formatPoints1Str, puntwoordVoorDisplay } from "@/lib/formatPoints";
 
@@ -61,20 +62,8 @@ export default function KlassementPage() {
     setLeaderboard(board);
 
     const ids = [...new Set(board.map((r) => r.user_id).filter(Boolean))];
-    if (ids.length > 0) {
-      const { data: profs } = await sb.from("profiles").select("id, display_name, email").in("id", ids);
-      const nm = new Map();
-      for (const p of profs || []) {
-        nm.set(String(p.id), {
-          id: p.id,
-          display_name: p.display_name,
-          email: p.email,
-        });
-      }
-      setLeaderboardProfiles(nm);
-    } else {
-      setLeaderboardProfiles(new Map());
-    }
+    const nm = await fetchLeaderboardProfilesForIds(sb, ids);
+    setLeaderboardProfiles(nm);
   }, [router]);
 
   useEffect(() => {
@@ -103,7 +92,7 @@ export default function KlassementPage() {
     if (!prof && user && String(userId) === String(user.id)) {
       prof = user.profile;
     }
-    return getDisplayName(prof ?? { id: userId }, meId);
+    return leaderboardParticipantName(prof ?? { id: userId }, meId);
   }
 
   function leaderboardTaskWord(n) {
