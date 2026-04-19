@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   let q = srv
     .from("tasks")
     .select(
-      "id, title, task_type, task_date, created_at, assigned_to, status, source, description, points, override_points, planning_explanation"
+      "id, title, task_type, task_date, created_at, user_id, assigned_to, created_by, status, source, description, points, override_points, planning_explanation"
     )
     .order("created_at", { ascending: false })
     .limit(MAX_ROWS);
@@ -59,5 +59,46 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ tasks: data ?? [] });
+  const tasks = data ?? [];
+
+  /** Koppel profielen server-side (service role); client `profilesMap` was vaak incompleet voor nieuwe gebruikers. */
+  const userIds = [
+    ...new Set(
+      tasks
+        .map((row) => {
+          const r = row as { assigned_to?: string | null; user_id?: string | null; created_by?: string | null };
+          const a = r.assigned_to != null && String(r.assigned_to).trim() !== "" ? String(r.assigned_to) : null;
+          const u = r.user_id != null && String(r.user_id).trim() !== "" ? String(r.user_id) : null;
+          const c = r.created_by != null && String(r.created_by).trim() !== "" ? String(r.created_by) : null;
+          return a ?? u ?? c;
+        })
+        .filter((x): x is string => Boolean(x))
+    ),
+  ];
+
+  const profileById = new Map<string, Record<string, unknown>>();
+  if (userIds.length > 0) {
+    const { data: profs, error: pErr } = await srv
+      .from("profiles")
+      .select("id, email, display_name, name, first_name, last_name")
+      .in("id", userIds);
+    if (!pErr && Array.isArray(profs)) {
+      for (const p of profs) {
+        const id = (p as { id?: string }).id;
+        if (id) profileById.set(String(id), p as Record<string, unknown>);
+      }
+    }
+  }
+
+  const enriched = tasks.map((row) => {
+    const r = row as { assigned_to?: string | null; user_id?: string | null; created_by?: string | null };
+    const a = r.assigned_to != null && String(r.assigned_to).trim() !== "" ? String(r.assigned_to) : null;
+    const u = r.user_id != null && String(r.user_id).trim() !== "" ? String(r.user_id) : null;
+    const c = r.created_by != null && String(r.created_by).trim() !== "" ? String(r.created_by) : null;
+    const uid = a ?? u ?? c;
+    const assignee_profile = uid ? profileById.get(uid) ?? null : null;
+    return { ...row, assignee_profile };
+  });
+
+  return NextResponse.json({ tasks: enriched });
 }

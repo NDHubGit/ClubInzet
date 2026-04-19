@@ -1,4 +1,5 @@
 import { effectiveTaskPoints } from "@/lib/points/effectiveTaskPoints";
+import { taskContributesToVolunteerPoints } from "@/lib/planning/taskStatus";
 
 export type LeaderboardRow = {
   user_id: string;
@@ -7,15 +8,14 @@ export type LeaderboardRow = {
 };
 
 /**
- * Klassement: goedgekeurde vrijwilligerspunten (assigned_to, status completed/approved).
+ * Klassement: goedgekeurde vrijwilligerspunten (assigned_to, status completed/approved na normalisatie).
  */
 export function buildLeaderboardFromTasks(allTasks: unknown[] | null | undefined): LeaderboardRow[] {
   const map: Record<string, { user_id: string; totalPoints: number; totalTasks: number }> = {};
   for (const t of allTasks || []) {
     if (!t || typeof t !== "object") continue;
     const row = t as { status?: string | null; assigned_to?: string | null };
-    const st = String(row.status || "").toLowerCase();
-    if (st !== "completed" && st !== "approved") continue;
+    if (!taskContributesToVolunteerPoints(row.status)) continue;
     const uid = row.assigned_to != null ? String(row.assigned_to) : "";
     if (!uid) continue;
     const pts = effectiveTaskPoints(row as { points?: unknown; override_points?: unknown | null });

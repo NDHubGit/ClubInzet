@@ -53,3 +53,22 @@ export function isTaskPlannable(
 export function isClaimedStatus(raw: string | null | undefined): boolean {
   return normalizeTaskStatus(raw) === "claimed";
 }
+
+/** Punten / klassement: alleen goedgekeurd (handmatig) of afgerond (claim-flow). */
+export function taskContributesToVolunteerPoints(raw: string | null | undefined): boolean {
+  const n = normalizeTaskStatus(raw);
+  return n === "approved" || n === "completed";
+}
+
+/**
+ * Home “Je taken”-preview: claim, goedgekeurd, afgerond + handmatige pending (wacht op admin).
+ */
+export function taskShowsInUserDashboardPreview(
+  raw: string | null | undefined,
+  source: string | null | undefined
+): boolean {
+  const n = normalizeTaskStatus(raw);
+  const src = String(source ?? "").toLowerCase().trim();
+  if (n === "pending" && src === "manual") return true;
+  return n === "claimed" || n === "approved" || n === "completed";
+}

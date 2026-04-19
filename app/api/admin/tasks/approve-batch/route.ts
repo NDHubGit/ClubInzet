@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 
 import { getRequestUser } from "@/lib/auth/getRequestUser";
 import { isUserAdmin } from "@/lib/auth/isAdmin";
@@ -84,6 +85,12 @@ export async function POST(request: Request) {
     }
     if (upd) approved += 1;
     else errors.push(`${taskId}: update mislukt`);
+  }
+
+  if (approved > 0) {
+    revalidatePath("/");
+    revalidatePath("/user");
+    revalidatePath("/klassement");
   }
 
   return NextResponse.json({ ok: true, approved, errors: errors.length ? errors : undefined });

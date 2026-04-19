@@ -1,10 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { formatPoints1Str } from "@/lib/formatPoints";
 import { supabase } from "@/lib/supabase";
-import { normalizeTaskStatus } from "@/lib/planning/taskStatus";
+import { normalizeTaskStatus, taskContributesToVolunteerPoints } from "@/lib/planning/taskStatus";
 import { getStatusLabel } from "@/lib/tasks/statusConfig";
 import { effectiveTaskPoints, VOLUNTEER_QUOTA_POINTS } from "@/lib/points/volunteerPoints";
 import type { MemberExportRow } from "@/lib/admin/aggregateMembers";
@@ -55,6 +56,9 @@ type TaskRow = {
   override_points?: number | null;
   /** Na migratie admin-taken; ontbrekend = actief in pool. */
   admin_active?: boolean | null;
+  /** Alleen van GET /api/admin/review-tasks: profiel van indiener (server-side join). */
+  assignee_profile?: ProfileRow | null;
+  created_by?: string | null;
 };
 
 function trimmedOrNull(v: unknown): string | null {
@@ -64,10 +68,16 @@ function trimmedOrNull(v: unknown): string | null {
 }
 
 /** Zelfde prioriteit als `displayNameForProfile` (export), zonder crash op null/leeg. */
-function adminMemberDisplayName(map: Map<string, ProfileRow>, userId: string | null | undefined): string {
-  if (!userId || String(userId).trim() === "") return "Onbekend";
-  const p = map.get(String(userId));
-  if (!p) return "Onbekend";
+function adminMemberDisplayName(
+  map: Map<string, ProfileRow>,
+  userId: string | null | undefined,
+  inlineProfile?: ProfileRow | null
+): string {
+  const p = inlineProfile ?? (userId && String(userId).trim() !== "" ? map.get(String(userId)) : undefined);
+  if (!p) {
+    if (userId && String(userId).trim() !== "") return `Gebruiker ${truncateId(String(userId))}`;
+    return "Onbekend";
+  }
 
   const fromName = trimmedOrNull(p.name);
   const fromDisplay = trimmedOrNull(p.display_name);
@@ -80,14 +90,23 @@ function adminMemberDisplayName(map: Map<string, ProfileRow>, userId: string | n
   const email = emailRaw.trim();
   const at = email.indexOf("@");
   const fromEmailLocal = at > 0 ? email.slice(0, at).trim() || null : null;
+  const fromFullEmail = email.length > 0 ? email : null;
 
-  return fromName ?? fromDisplay ?? fromFirstLast ?? fromEmailLocal ?? "Onbekend";
+  return fromName ?? fromDisplay ?? fromFirstLast ?? fromEmailLocal ?? fromFullEmail ?? "Onbekend";
 }
 
 function truncateId(id: string | null | undefined, head = 6): string {
   if (!id) return "—";
   const s = String(id);
   return s.length > head + 2 ? `${s.slice(0, head)}…` : s;
+}
+
+/** Zelfde volgorde als server review-tasks: toegewezen → eigenaar → maker. */
+function submitterUserIdForTask(t: TaskRow): string | null {
+  if (t.assigned_to != null && String(t.assigned_to).trim() !== "") return String(t.assigned_to);
+  if (t.user_id != null && String(t.user_id).trim() !== "") return String(t.user_id);
+  if (t.created_by != null && String(t.created_by).trim() !== "") return String(t.created_by);
+  return null;
 }
 
 function formatTaskDate(t: TaskRow): string {
@@ -151,6 +170,7 @@ export type AdminDashboardProps = {
 };
 
 export default function AdminDashboard({ me }: AdminDashboardProps) {
+  const router = useRouter();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [profilesMap, setProfilesMap] = useState(() => new Map<string, ProfileRow>());
   const [loading, setLoading] = useState(true);
@@ -201,10 +221,7 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
 
   /** Goedgekeurd of afgerond (punten tellen mee). */
   const approvedTasksCount = useMemo(() => {
-    return tasks.filter((t) => {
-      const st = normalizeTaskStatus(t.status);
-      return st === "approved" || st === "completed";
-    }).length;
+    return tasks.filter((t) => taskContributesToVolunteerPoints(t.status)).length;
   }, [tasks]);
 
   /** Top 5 leden op totaalpunten (zelfde bron als export). */
@@ -304,12 +321,19 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
         setReviewTasks([]);
       } else {
         const list = (Array.isArray(rj.tasks) ? rj.tasks : []) as TaskRow[];
-        setReviewTasks(
-          list.filter(
-            (t) =>
-              normalizeTaskStatus(t.status) === "pending" && String(t.source ?? "").toLowerCase() === "manual"
-          )
+        const filtered = list.filter(
+          (t) =>
+            normalizeTaskStatus(t.status) === "pending" && String(t.source ?? "").toLowerCase() === "manual"
         );
+        setReviewTasks(filtered);
+        setProfilesMap((prev) => {
+          const next = new Map(prev);
+          for (const t of filtered) {
+            const ap = t.assignee_profile;
+            if (ap && ap.id) next.set(String(ap.id), ap);
+          }
+          return next;
+        });
       }
     } catch (e) {
       console.error("[loadAdminDashboardSlices]", e);
@@ -405,8 +429,7 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
     let sum = 0;
     for (const t of tasks) {
       if (String(t.assigned_to ?? "") !== uid) continue;
-      const st = normalizeTaskStatus(t.status);
-      if (st !== "completed" && st !== "approved") continue;
+      if (!taskContributesToVolunteerPoints(t.status)) continue;
       sum += effectiveTaskPoints(t as { points?: unknown; override_points?: unknown | null });
     }
     return Math.round(sum * 1000) / 1000;
@@ -465,6 +488,7 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(j.error || res.statusText);
       await reload();
+      router.refresh();
       if (isAdmin) await refreshAdminSlices();
     } catch (e: unknown) {
       setPlanningMsg(e instanceof Error ? e.message : String(e));
@@ -916,13 +940,14 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
                     </thead>
                     <tbody>
                       {reviewTasks.map((t) => {
+                        const submitterId = submitterUserIdForTask(t);
                         return (
                           <tr key={t.id} className="border-b border-white/[0.06]">
                             <td
                               className="px-2 py-2 text-left align-top"
-                              title={t.assigned_to ? truncateId(t.assigned_to) : undefined}
+                              title={submitterId ? truncateId(submitterId) : undefined}
                             >
-                              {adminMemberDisplayName(profilesMap, t.assigned_to)}
+                              {adminMemberDisplayName(profilesMap, submitterId, t.assignee_profile)}
                             </td>
                             <td className="px-2 py-2 text-left align-top font-semibold">{t.task_type || "—"}</td>
                             <td className="px-2 py-2 text-center align-top opacity-90">{formatTaskDate(t)}</td>

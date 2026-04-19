@@ -14,8 +14,7 @@ export async function getUserVolunteerPoints(supabase: SupabaseClient, userId: s
   const { data, error } = await supabase
     .from("tasks")
     .select("points, override_points, status")
-    .eq("assigned_to", userId)
-    .in("status", ["completed", "approved"]);
+    .eq("assigned_to", userId);
 
   if (error) {
     console.warn("[getUserVolunteerPoints]", error.message);
@@ -36,11 +35,7 @@ export async function getVolunteerPointsMap(
   for (const id of profileIds) map.set(id, 0);
   if (profileIds.length === 0) return map;
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .select("assigned_to, points, override_points, status")
-    .in("status", ["completed", "approved"])
-    .in("assigned_to", profileIds);
+  const { data, error } = await supabase.from("tasks").select("assigned_to, points, override_points, status").in("assigned_to", profileIds);
 
   if (error) {
     console.warn("[getVolunteerPointsMap]", error.message);

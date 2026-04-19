@@ -1,9 +1,8 @@
 import { effectiveTaskPoints } from "@/lib/points/effectiveTaskPoints";
-
-const POINT_COUNT_STATUSES = new Set(["approved", "completed"]);
+import { taskContributesToVolunteerPoints } from "@/lib/planning/taskStatus";
 
 /**
- * Totaal vrijwilligerspunten: alleen goedgekeurde / afgeronde taken.
+ * Totaal vrijwilligerspunten: alleen goedgekeurde / afgeronde taken (genormaliseerde status, o.a. legacy `voltooid` → completed).
  * Gebruikt effectieve punten (override wint op `points`).
  */
 export function calculatePoints(
@@ -11,8 +10,7 @@ export function calculatePoints(
 ): number {
   let sum = 0;
   for (const t of tasks || []) {
-    const st = String(t.status ?? "").toLowerCase();
-    if (!POINT_COUNT_STATUSES.has(st)) continue;
+    if (!taskContributesToVolunteerPoints(t.status)) continue;
     sum += effectiveTaskPoints(t);
   }
   return Math.round(sum * 10) / 10;

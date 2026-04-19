@@ -5,11 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchOrCreateClientProfile } from "@/lib/auth/clientProfile";
 import { getDisplayName, resolveProfilePublicName } from "@/lib/displayName";
-import { normalizeTaskStatus } from "@/lib/planning/taskStatus";
+import {
+  normalizeTaskStatus,
+  taskContributesToVolunteerPoints,
+  taskShowsInUserDashboardPreview,
+} from "@/lib/planning/taskStatus";
 import { getSupabase } from "@/lib/supabase";
 import { formatDuurPuntRegel, formatPoints1Str, puntwoordVoorDisplay } from "@/lib/formatPoints";
 import { calculatePoints } from "@/lib/points/calculatePoints";
-import { effectiveTaskPoints } from "@/lib/points/effectiveTaskPoints";
 import { VOLUNTEER_QUOTA_POINTS } from "@/lib/points/volunteerPoints";
 import { TaskStatusBadge } from "@/components/tasks/TaskStatusBadge";
 import { getTaskCardSurfaceStyle } from "@/lib/tasks/statusConfig";
@@ -27,34 +30,38 @@ function taskPointsDisplay(t) {
   return Number.isFinite(m) ? m / 60 : 0;
 }
 
-/** Punten per taak: duration_minutes / 60 */
-function pointsFromDurationMinutes(task) {
-  const m = Number(task.duration_minutes);
-  return Number.isFinite(m) ? m / 60 : 0;
-}
-
 function dashboardTaskSortDate(t) {
   if (t.task_date) return String(t.task_date).slice(0, 10);
   if (t.created_at) return String(t.created_at).slice(0, 10);
   return "0000-00-00";
 }
 
-/** Dashboard “Je taken”: alleen toegewezen werk met claimed / goedgekeurd / afgerond (geen pool-planned). */
+/** Dashboard “Je taken”: claim, goedgekeurd, afgerond + handmatige pending (wacht op admin). */
 function isDashboardPreviewTask(t) {
-  const n = normalizeTaskStatus(t.status);
-  return n === "claimed" || n === "approved" || n === "completed";
+  return taskShowsInUserDashboardPreview(t.status, t.source);
 }
 
 function compareDashboardTasks(a, b) {
-  const pri = (s) => {
-    const x = normalizeTaskStatus(s);
+  const pri = (row) => {
+    const x = normalizeTaskStatus(row.status);
+    const src = String(row.source ?? "").toLowerCase();
     if (x === "claimed") return 0;
-    if (x === "approved" || x === "completed") return 1;
-    return 2;
+    if (x === "pending" && src === "manual") return 1;
+    if (x === "approved" || x === "completed") return 2;
+    return 3;
   };
-  const c = pri(a.status) - pri(b.status);
+  const c = pri(a) - pri(b);
   if (c !== 0) return c;
   return dashboardTaskSortDate(a).localeCompare(dashboardTaskSortDate(b));
+}
+
+function isTaskVisibleForUser(t, userId) {
+  const uid = String(userId);
+  if (t.assigned_to != null && String(t.assigned_to).trim() !== "" && String(t.assigned_to) === uid) return true;
+  if (t.user_id != null && String(t.user_id) === uid) return true;
+  if (t.created_by != null && String(t.created_by) === uid) return true;
+  if (t.completed_by != null && String(t.completed_by) === uid) return true;
+  return false;
 }
 
 export default function HomePage() {
@@ -110,11 +117,7 @@ export default function HomePage() {
     }
 
     const list = allTasks || [];
-    const mine = list.filter((t) => {
-      const aid = t.assigned_to;
-      if (aid != null && String(aid).trim() !== "") return String(aid) === String(u.id);
-      return String(t.user_id) === String(u.id);
-    });
+    const mine = list.filter((t) => isTaskVisibleForUser(t, u.id));
     setTasks(mine);
     const board = buildLeaderboardFromTasks(list);
     setLeaderboard(board);
@@ -155,6 +158,28 @@ export default function HomePage() {
     };
   }, [loadData]);
 
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    const sb = getSupabase();
+    const ch = sb
+      .channel(`home-tasks-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => {
+        void loadData();
+      })
+      .subscribe();
+    return () => {
+      void sb.removeChannel(ch);
+    };
+  }, [user?.id, loadData]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") void loadData();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [loadData]);
+
   const dashboardPreviewTasks = useMemo(() => {
     const list = tasks.filter(isDashboardPreviewTask);
     list.sort(compareDashboardTasks);
@@ -188,10 +213,7 @@ export default function HomePage() {
 
   const totalPoints = calculatePoints(tasks);
   const totalPointsSafe = Number.isFinite(Number(totalPoints)) ? Number(totalPoints) : 0;
-  const taskCount = tasks.filter((t) => {
-    const n = normalizeTaskStatus(t.status);
-    return n === "claimed" || n === "approved" || n === "completed";
-  }).length;
+  const taskCount = tasks.filter((t) => taskContributesToVolunteerPoints(t.status)).length;
 
   const shell = {
     minHeight: "100vh",

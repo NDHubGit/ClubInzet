@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 
 import { getRequestUser } from "@/lib/auth/getRequestUser";
 import { isUserAdmin } from "@/lib/auth/isAdmin";
@@ -73,6 +74,10 @@ export async function POST(request: Request) {
   if (!upd) {
     return NextResponse.json({ error: "Update mislukt (concurrentie?)" }, { status: 409 });
   }
+
+  revalidatePath("/");
+  revalidatePath("/user");
+  revalidatePath("/klassement");
 
   return NextResponse.json({ ok: true, approved_at: now });
 }
