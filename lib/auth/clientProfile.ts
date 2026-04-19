@@ -1,14 +1,26 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { RequestUserProfile } from "@/lib/auth/getRequestUser";
+import { tryClientSelectInsertProfile } from "@/lib/auth/profileShared";
+
+const PROFILE_FLOW = "[ClubInzet profile-flow]";
 
 export type FetchOrCreateClientProfileResult =
   | { ok: true; profile: RequestUserProfile }
-  | { ok: false; code: "no_user" | "select_error" | "no_profile_after_insert" };
+  | {
+      ok: false;
+      code: "no_user" | "select_error" | "no_profile_after_insert";
+      detail?: string;
+    };
+
+function formatSelectError(detail: string, code?: string): string {
+  const parts = [detail.trim(), code ? `(code: ${code})` : ""].filter(Boolean);
+  return parts.join(" ");
+}
 
 /**
- * Client-side sessie: profiel uit `profiles`; ontbreekt die → insert (zelfde pad als login/callback,
- * geen afhankelijkheid van server-cookiesync).
+ * Browser: alleen `createBrowserClient`-sessie — profiel via RLS met actieve JWT.
+ * Geen server-fetch / geen service-role-herstel (dat maskeerde ontbrekende sessie).
  */
 export async function fetchOrCreateClientProfile(
   supabase: SupabaseClient,
@@ -19,55 +31,78 @@ export async function fetchOrCreateClientProfile(
     error: userErr,
   } = await supabase.auth.getUser();
   if (userErr || !user) {
+    console.warn(PROFILE_FLOW, "getUser failed → no_user", {
+      logUserPrefix,
+      error: userErr?.message,
+    });
     return { ok: false, code: "no_user" };
   }
 
-  console.log(logUserPrefix, user.id);
+  const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+  const hasSession = Boolean(sessionData.session);
+  const hasAccessToken = Boolean(sessionData.session?.access_token);
 
-  const { data: profile, error: selErr } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
+  console.info(PROFILE_FLOW, "authenticated user + session", {
+    logUserPrefix,
+    userId: user.id,
+    email: user.email ?? null,
+    hasSession,
+    hasAccessToken,
+    sessionError: sessionErr?.message ?? null,
+  });
 
-  if (selErr) {
-    console.error("[PROFILE SELECT]", selErr);
-    return { ok: false, code: "select_error" };
+  if (!hasSession) {
+    const refreshed = await supabase.auth.refreshSession();
+    console.info(PROFILE_FLOW, "refreshSession na ontbrekende sessie", {
+      hasSessionAfter: Boolean(refreshed.data.session),
+      error: refreshed.error?.message,
+    });
   }
 
-  console.log("[PROFILE RESULT]", profile);
+  console.info(PROFILE_FLOW, "profile query start (browser client + JWT)", { userId: user.id });
+  const attempt = await tryClientSelectInsertProfile(supabase, user);
 
-  let resolved: RequestUserProfile | null = profile as RequestUserProfile | null;
-
-  if (!resolved) {
-    console.warn("Creating missing profile");
-    const em = user.email ?? "";
-    const { data: newProfile, error: insErr } = await supabase
-      .from("profiles")
-      .insert({
-        id: user.id,
-        email: em || null,
-        role: "user",
-        display_name: em.includes("@") ? em.split("@")[0] : em || "Gebruiker",
-      })
-      .select()
-      .maybeSingle();
-
-    if (insErr) {
-      const { data: retry } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-      resolved = retry as RequestUserProfile | null;
-      if (!resolved) {
-        console.error("[PROFILE INSERT]", insErr);
-        return { ok: false, code: "no_profile_after_insert" };
-      }
-    } else {
-      resolved = newProfile as RequestUserProfile;
-    }
+  if (attempt.profile) {
+    console.info(PROFILE_FLOW, "profile query ok", {
+      userId: user.id,
+      profileId: attempt.profile.id,
+    });
+    return { ok: true, profile: attempt.profile };
   }
 
-  if (!resolved) {
-    return { ok: false, code: "no_profile_after_insert" };
+  if (attempt.selectError?.message === "profile_id_mismatch") {
+    return {
+      ok: false,
+      code: "select_error",
+      detail: "Profiel hoort niet bij dit account. Neem contact op met de beheerder.",
+    };
   }
 
-  return { ok: true, profile: resolved };
+  if (attempt.selectError) {
+    console.error(PROFILE_FLOW, "profile query failed", {
+      userId: user.id,
+      message: attempt.selectError.message,
+      code: attempt.selectError.code,
+    });
+    return {
+      ok: false,
+      code: "select_error",
+      detail: formatSelectError(attempt.selectError.message, attempt.selectError.code),
+    };
+  }
+
+  if (attempt.insertError) {
+    console.error(PROFILE_FLOW, "profile insert failed", {
+      userId: user.id,
+      message: attempt.insertError.message,
+      code: attempt.insertError.code,
+    });
+    return {
+      ok: false,
+      code: "no_profile_after_insert",
+      detail: formatSelectError(attempt.insertError.message, attempt.insertError.code),
+    };
+  }
+
+  return { ok: false, code: "no_profile_after_insert", detail: "Geen profiel na insert." };
 }

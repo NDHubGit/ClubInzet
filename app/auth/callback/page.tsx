@@ -35,8 +35,12 @@ export default function AuthCallbackPage() {
         }
         setErr(
           result.code === "select_error"
-            ? "Profiel kon niet worden geladen."
-            : "Profiel kon niet worden aangemaakt. Controleer RLS (select/insert eigen profiel)."
+            ? result.detail
+              ? `Profiel kon niet worden geladen. ${result.detail}`
+              : "Profiel kon niet worden geladen. Vernieuw de pagina of probeer opnieuw."
+            : result.detail
+              ? `Profiel kon niet worden aangemaakt. ${result.detail}`
+              : "Profiel kon niet worden aangemaakt. Vernieuw de pagina of probeer opnieuw."
         );
         return;
       }

@@ -36,10 +36,18 @@ export default function LoginPage() {
         router.replace("/login");
         return;
       }
+      if (result.code === "select_error") {
+        setError(
+          result.detail
+            ? `Profiel kon niet worden geladen. ${result.detail}`
+            : "Profiel kon niet worden geladen. Vernieuw de pagina of probeer opnieuw in te loggen."
+        );
+        return;
+      }
       setError(
-        result.code === "select_error"
-          ? "Profiel kon niet worden geladen."
-          : "Profiel kon niet worden aangemaakt. Controleer RLS (select/insert eigen profiel)."
+        result.detail
+          ? `Profiel kon niet worden aangemaakt. ${result.detail}`
+          : "Profiel kon niet worden aangemaakt. Vernieuw de pagina of probeer opnieuw — je account is wel ingelogd."
       );
       return;
     }

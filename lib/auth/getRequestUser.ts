@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { adminAuthDebug } from "@/lib/admin/adminAuthDebugLog";
 import type { AdminAuthDenyReason } from "@/lib/admin/adminAuthDenyReasons";
 import { bearerFromRequest, getUserFromBearer } from "@/lib/auth/getUserFromBearer";
+import { tryClientSelectInsertProfile } from "@/lib/auth/profileShared";
 import { createServerClient } from "@/lib/supabase/server";
 
 /** Profiel uit `profiles` (verse query per request). */
@@ -31,51 +32,18 @@ export type RequestAuthenticationMeta = {
 };
 
 async function fetchOrCreateProfile(supabase: SupabaseClient, user: User): Promise<GetRequestUserResult> {
-  const { data: profile, error: selErr } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (selErr) {
-    console.error("PROFILE ERROR", selErr);
-    return { user, profile: null };
+  const attempt = await tryClientSelectInsertProfile(supabase, user);
+  if (attempt.profile) {
+    return { user, profile: attempt.profile };
   }
 
-  if (profile) {
-    console.log("[USER]", user.id);
-    console.log("[PROFILE]", profile);
-    return { user, profile: profile as RequestUserProfile };
-  }
-
-  console.warn("No profile found → creating one");
-
-  const email = user.email ?? "";
-  const { data: newProfile, error: insErr } = await supabase
-    .from("profiles")
-    .insert({
-      id: user.id,
-      email: email || null,
-      role: "user",
-      display_name: email.includes("@") ? email.split("@")[0] : email || "Gebruiker",
-    })
-    .select()
-    .maybeSingle();
-
-  if (insErr) {
-    const { data: retry } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-    if (retry) {
-      console.log("[USER]", user.id);
-      console.log("[PROFILE]", retry);
-      return { user, profile: retry as RequestUserProfile };
-    }
-    console.error("PROFILE INSERT ERROR", insErr);
-    return { user, profile: null };
-  }
-
-  console.log("[USER]", user.id);
-  console.log("[PROFILE]", newProfile);
-  return { user, profile: newProfile as RequestUserProfile };
+  console.warn("[fetchOrCreateProfile] profiel niet geladen (alleen authenticated client, geen service role)", {
+    userId: user.id,
+    email: user.email ?? null,
+    selectError: attempt.selectError,
+    insertError: attempt.insertError,
+  });
+  return { user, profile: null };
 }
 
 function requestPathAndMethod(request?: Request): { path: string; method: string } {

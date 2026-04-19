@@ -16,18 +16,25 @@ export default function AdminPage() {
     let cancelled = false;
     (async () => {
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user ?? null;
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser();
       if (cancelled) return;
 
-      if (!user) {
+      if (userErr || !user) {
         router.replace("/login");
         setAuthLoading(false);
         return;
       }
 
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      const { data: profile, error: profErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      if (profErr) {
+        console.error("[admin page] profiel", profErr.message, profErr.code);
+      }
       const path = pathForProfileRole(profile);
       if (path !== "/admin") {
         router.replace(path);
