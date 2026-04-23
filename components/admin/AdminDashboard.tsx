@@ -1060,7 +1060,7 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
             </section>
 
             <section style={{ ...card, marginBottom: 16 }}>
-              <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700 }}>Adminbeheer</h2>
+              <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700 }}>Gebruikers en rollen</h2>
               <p style={{ margin: "0 0 12px", fontSize: 13, opacity: 0.8 }}>
                 Beheer rollen van bestaande leden. Alleen admins kunnen dit aanpassen.
               </p>
