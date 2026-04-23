@@ -430,6 +430,20 @@ export default function HomePage() {
           Uitloggen
         </button>
         <a
+          href="/privacy"
+          style={{
+            display: "block",
+            textAlign: "center",
+            marginTop: 12,
+            color: "rgba(148,163,184,0.9)",
+            fontSize: 13,
+            textDecoration: "underline",
+            textUnderlineOffset: 4,
+          }}
+        >
+          Privacy
+        </a>
+        <a
           href="/admin"
           style={{ display: "block", textAlign: "center", marginTop: 14, color: "#94a3b8", fontSize: 13 }}
         >

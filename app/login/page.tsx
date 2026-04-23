@@ -2,6 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import AppBrandTitle from "@/components/branding/AppBrandTitle";
@@ -282,6 +283,15 @@ export default function LoginPage() {
             </>
           )}
         </p>
+
+        <div className="mt-8 flex justify-center">
+          <Link
+            href="/privacy"
+            className="text-xs font-semibold text-slate-300/80 hover:text-slate-100 underline underline-offset-4"
+          >
+            Privacy
+          </Link>
+        </div>
       </div>
     </div>
   );
