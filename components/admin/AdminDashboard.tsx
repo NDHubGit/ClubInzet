@@ -31,6 +31,13 @@ type ProfileRow = {
   role?: string | null;
 };
 
+type AdminUserRow = {
+  id: string;
+  email: string | null;
+  display_name: string | null;
+  role: string | null;
+};
+
 type TaskRow = {
   id: string;
   title?: string | null;
@@ -173,13 +180,12 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
   const router = useRouter();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [profilesMap, setProfilesMap] = useState(() => new Map<string, ProfileRow>());
-  const [allProfiles, setAllProfiles] = useState<ProfileRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [planningMsg, setPlanningMsg] = useState<string | null>(null);
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
   const [roleMsg, setRoleMsg] = useState<string | null>(null);
-  const [rolesProfilesError, setRolesProfilesError] = useState<string | null>(null);
-  const [rolesProfilesStatus, setRolesProfilesStatus] = useState<number | null>(null);
+  const [roleRows, setRoleRows] = useState<AdminUserRow[]>([]);
+  const [rolesError, setRolesError] = useState<string | null>(null);
   const [taskActionBusy, setTaskActionBusy] = useState<string | null>(null);
   const [manualReviewBusy, setManualReviewBusy] = useState<string | null>(null);
   const [pointsSaveBusy, setPointsSaveBusy] = useState<string | null>(null);
@@ -281,14 +287,14 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
   const isAdmin = effectiveRole.toLowerCase() === "admin";
 
   const allProfilesSorted = useMemo(() => {
-    const list = [...allProfiles];
+    const list = [...roleRows];
     list.sort((a, b) => {
       const an = adminMemberDisplayName(profilesMap, a.id);
       const bn = adminMemberDisplayName(profilesMap, b.id);
       return an.localeCompare(bn, "nl", { sensitivity: "base" });
     });
     return list;
-  }, [allProfiles, profilesMap]);
+  }, [roleRows, profilesMap]);
 
   /**
    * Eén token + parallel fetch: zelfde auth-context als `AdminTaskTypesPanel` (getUser → sessietoken).
@@ -298,19 +304,17 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
     setReviewLoading(true);
     setMemberSummaryError(null);
     setReviewTasksError(null);
-    setRolesProfilesError(null);
-    setRolesProfilesStatus(null);
+    setRolesError(null);
     try {
       const token = await getAccessTokenForAdminRoutes();
       if (!token) {
         const msg = "Geen geldige sessie voor admin-API. Vernieuw de pagina of log opnieuw in.";
         setMemberSummaryError(msg);
         setReviewTasksError(msg);
-        setRolesProfilesError(msg);
-        setRolesProfilesStatus(401);
+        setRolesError(msg);
         setMemberRows([]);
         setReviewTasks([]);
-        setAllProfiles([]);
+        setRoleRows([]);
         return;
       }
       const headers = new Headers({ Authorization: `Bearer ${token}` });
@@ -318,10 +322,10 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
       const q = new URLSearchParams();
       q.set("status", "pending");
       q.set("source", "manual");
-      const [mRes, rRes, pRes] = await Promise.all([
+      const [mRes, rRes, uRes] = await Promise.all([
         fetch("/api/admin/members-summary", init),
         fetch(`/api/admin/review-tasks?${q.toString()}`, init),
-        fetch("/api/admin/profiles", init),
+        fetch("/api/admin/users", init),
       ]);
 
       const mj = (await mRes.json().catch(() => ({}))) as {
@@ -357,43 +361,36 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
         });
       }
 
-      const pj = (await pRes.json().catch(() => ({}))) as { profiles?: ProfileRow[]; error?: string; message?: string };
-      if (!pRes.ok) {
-        // Niet hard-failen; andere slices kunnen nog werken.
-        console.error("[admin/profiles]", {
-          status: pRes.status,
-          statusText: pRes.statusText,
-          body: pj,
-        });
-        setRolesProfilesStatus(pRes.status);
-        setRolesProfilesError(adminApiSliceErrorMessage(pRes, pj));
-        setAllProfiles([]);
+      const uj = (await uRes.json().catch(() => ({}))) as { rows?: AdminUserRow[]; error?: string; message?: string };
+      if (!uRes.ok) {
+        console.error("[admin/users]", { status: uRes.status, body: uj });
+        setRolesError(adminApiSliceErrorMessage(uRes, uj));
+        setRoleRows([]);
       } else {
-        const list = Array.isArray(pj.profiles) ? (pj.profiles as ProfileRow[]) : [];
-        if (process.env.NODE_ENV === "development") {
-          console.info("[admin/profiles] ok", { count: list.length });
-        }
-        if (list.length === 0) {
-          console.warn("[admin/profiles] lege lijst (unexpected)", { body: pj });
-        }
-        setAllProfiles(list);
-        // Vul/overschrijf map met volledige serverlijst (RLS-proof), zodat labels overal kloppen.
-        setProfilesMap(() => {
-          const m = new Map<string, ProfileRow>();
-          for (const p of list) {
-            if (p?.id) m.set(String(p.id), p);
+        const rows = Array.isArray(uj.rows) ? (uj.rows as AdminUserRow[]) : [];
+        setRoleRows(rows);
+        // Gebruik exact dezelfde bron als rollenbeheer voor naamweergave in deze sectie.
+        setProfilesMap((prev) => {
+          const next = new Map(prev);
+          for (const r of rows) {
+            next.set(String(r.id), {
+              id: String(r.id),
+              email: r.email ?? null,
+              display_name: r.display_name ?? null,
+              role: r.role ?? null,
+            });
           }
-          return m;
+          return next;
         });
       }
     } catch (e) {
       console.error("[loadAdminDashboardSlices]", e);
       setMemberSummaryError("Kon ledenoverzicht niet laden.");
       setReviewTasksError("Kon te beoordelen taken niet laden.");
-      setRolesProfilesError("Kon profielenlijst niet laden.");
+      setRolesError("Kon profielenlijst niet laden.");
       setMemberRows([]);
       setReviewTasks([]);
-      setAllProfiles([]);
+      setRoleRows([]);
     } finally {
       setMemberSummaryLoading(false);
       setReviewLoading(false);
@@ -559,18 +556,17 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
         setRoleMsg("Geen geldige sessie voor admin-API. Vernieuw de pagina of log opnieuw in.");
         return;
       }
-      const res = await fetch("/api/admin/roles", {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(profileId)}/role`, {
         ...ADMIN_API_FETCH_BASE,
-        method: "POST",
+        method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ profileId, role: nextRole }),
+        body: JSON.stringify({ role: nextRole }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(j.error || res.statusText);
-      await reload();
       await refreshAdminSlices();
       router.refresh();
       setRoleMsg("Rollen bijgewerkt.");
@@ -1113,12 +1109,9 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
               {roleMsg ? (
                 <p style={{ margin: "0 0 10px", fontSize: 13, color: "#e2e8f0", opacity: 0.9 }}>{roleMsg}</p>
               ) : null}
-              {rolesProfilesError ? (
+              {rolesError ? (
                 <p style={{ margin: "0 0 10px", fontSize: 13, color: "#fca5a5", lineHeight: 1.45 }}>
-                  {rolesProfilesError}
-                  {rolesProfilesStatus ? (
-                    <span style={{ opacity: 0.85 }}>{` (status ${rolesProfilesStatus})`}</span>
-                  ) : null}
+                  {rolesError}
                 </p>
               ) : null}
               {allProfilesSorted.length === 0 ? (
@@ -1151,10 +1144,14 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
                       const isPAdmin = role === "admin";
                       const isMe = String(p.id) === String(me.id);
                       const busy = roleBusyId === String(p.id);
+                      const name =
+                        (p.display_name && String(p.display_name).trim()) ||
+                        (p.email && String(p.email).includes("@") ? String(p.email).split("@")[0] : null) ||
+                        "Onbekend";
                       return (
                         <tr key={p.id} className="border-b border-white/[0.06]">
                           <td className="px-2 py-2 align-top font-semibold">
-                            {adminMemberDisplayName(profilesMap, p.id)}
+                            {name}
                             {isMe ? <span style={{ marginLeft: 8, opacity: 0.7 }}>(jij)</span> : null}
                           </td>
                           <td className="px-2 py-2 align-top opacity-90">{p.email ?? "—"}</td>
