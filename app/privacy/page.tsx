@@ -72,7 +72,15 @@ export default function PrivacyPage() {
                 <li>Correctie of verwijdering</li>
                 <li>Verzoek tot verwijdering van je account</li>
               </ul>
-              <p className="mt-3 text-slate-300">Neem hiervoor contact op via: [jouw e-mailadres]</p>
+              <p className="mt-3 text-slate-300">
+                Voor vragen kun je contact opnemen via:{" "}
+                <a
+                  href="mailto:clubinzet@doodkorte.com?subject=Vraag%20omtrent%20Privacy%20ClubInzet"
+                  className="underline underline-offset-4 hover:opacity-80"
+                >
+                  clubinzet@doodkorte.com
+                </a>
+              </p>
             </section>
 
             <section>

@@ -78,7 +78,13 @@ export default function VoorwaardenPage() {
             <section>
               <h2 className="text-lg font-bold text-slate-50">7. Contact</h2>
               <p className="mt-2 text-slate-300">
-                Voor vragen kun je contact opnemen via: <span className="font-semibold">clubinzet@doodkorte.com</span>
+                Voor vragen kun je contact opnemen via:{" "}
+                <a
+                  href="mailto:clubinzet@doodkorte.com?subject=Vraag%20omtrent%20Voorwaarden%20ClubInzet"
+                  className="underline underline-offset-4 hover:opacity-80"
+                >
+                  clubinzet@doodkorte.com
+                </a>
               </p>
             </section>
           </div>
