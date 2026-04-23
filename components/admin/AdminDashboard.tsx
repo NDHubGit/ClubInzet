@@ -175,6 +175,8 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
   const [profilesMap, setProfilesMap] = useState(() => new Map<string, ProfileRow>());
   const [loading, setLoading] = useState(true);
   const [planningMsg, setPlanningMsg] = useState<string | null>(null);
+  const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
+  const [roleMsg, setRoleMsg] = useState<string | null>(null);
   const [taskActionBusy, setTaskActionBusy] = useState<string | null>(null);
   const [manualReviewBusy, setManualReviewBusy] = useState<string | null>(null);
   const [pointsSaveBusy, setPointsSaveBusy] = useState<string | null>(null);
@@ -274,6 +276,12 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
   }, [profilesMap, me.id, me.role]);
 
   const isAdmin = effectiveRole.toLowerCase() === "admin";
+
+  const allProfilesSorted = useMemo(() => {
+    const list = Array.from(profilesMap.values());
+    list.sort((a, b) => adminMemberDisplayName(profilesMap, a.id).localeCompare(adminMemberDisplayName(profilesMap, b.id), "nl", { sensitivity: "base" }));
+    return list;
+  }, [profilesMap]);
 
   /**
    * Eén token + parallel fetch: zelfde auth-context als `AdminTaskTypesPanel` (getUser → sessietoken).
@@ -494,6 +502,36 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
       setPlanningMsg(e instanceof Error ? e.message : String(e));
     } finally {
       setManualReviewBusy(null);
+    }
+  }
+
+  async function setProfileRole(profileId: string, nextRole: "admin" | "member") {
+    setRoleBusyId(profileId);
+    setRoleMsg(null);
+    try {
+      const token = await getAccessTokenForAdminRoutes();
+      if (!token) {
+        setRoleMsg("Geen geldige sessie voor admin-API. Vernieuw de pagina of log opnieuw in.");
+        return;
+      }
+      const res = await fetch("/api/admin/roles", {
+        ...ADMIN_API_FETCH_BASE,
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ profileId, role: nextRole }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(j.error || res.statusText);
+      await reload();
+      router.refresh();
+      setRoleMsg("Rollen bijgewerkt.");
+    } catch (e: unknown) {
+      setRoleMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRoleBusyId(null);
     }
   }
 
@@ -1019,6 +1057,82 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
                   </table>
                 </div>
               )}
+            </section>
+
+            <section style={{ ...card, marginBottom: 16 }}>
+              <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700 }}>Adminbeheer</h2>
+              <p style={{ margin: "0 0 12px", fontSize: 13, opacity: 0.8 }}>
+                Beheer rollen van bestaande leden. Alleen admins kunnen dit aanpassen.
+              </p>
+              {roleMsg ? (
+                <p style={{ margin: "0 0 10px", fontSize: 13, color: "#e2e8f0", opacity: 0.9 }}>{roleMsg}</p>
+              ) : null}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-0 border-collapse text-[13px] text-slate-200 sm:min-w-[640px]">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="px-2 py-2 text-left font-semibold">Naam</th>
+                      <th className="px-2 py-2 text-left font-semibold">E-mail</th>
+                      <th className="px-2 py-2 text-left font-semibold">Rol</th>
+                      <th className="px-2 py-2 text-left font-semibold">Actie</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allProfilesSorted.map((p) => {
+                      const role = String(p.role ?? "").toLowerCase().trim();
+                      const isPAdmin = role === "admin";
+                      const isMe = String(p.id) === String(me.id);
+                      const busy = roleBusyId === String(p.id);
+                      return (
+                        <tr key={p.id} className="border-b border-white/[0.06]">
+                          <td className="px-2 py-2 align-top font-semibold">
+                            {adminMemberDisplayName(profilesMap, p.id)}
+                            {isMe ? <span style={{ marginLeft: 8, opacity: 0.7 }}>(jij)</span> : null}
+                          </td>
+                          <td className="px-2 py-2 align-top opacity-90">{p.email ?? "—"}</td>
+                          <td className="px-2 py-2 align-top">
+                            <span
+                              style={{
+                                padding: "3px 10px",
+                                borderRadius: 999,
+                                fontSize: 12,
+                                fontWeight: 800,
+                                border: "1px solid rgba(255,255,255,0.14)",
+                                background: isPAdmin ? "rgba(34,197,94,0.14)" : "rgba(148,163,184,0.10)",
+                                color: isPAdmin ? "#bbf7d0" : "#e2e8f0",
+                              }}
+                            >
+                              {isPAdmin ? "admin" : "member"}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2 align-top whitespace-nowrap">
+                            {isPAdmin ? (
+                              <button
+                                type="button"
+                                disabled={busy || isMe}
+                                onClick={() => void setProfileRole(String(p.id), "member")}
+                                style={{ ...btnGhost, padding: "6px 10px", fontSize: 12, width: "auto" }}
+                                title={isMe ? "Je kunt je eigen adminrechten niet verwijderen." : undefined}
+                              >
+                                {busy ? "…" : "Verwijder admin"}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void setProfileRole(String(p.id), "admin")}
+                                style={{ ...btnPrimary, padding: "6px 10px", fontSize: 12, width: "auto" }}
+                              >
+                                {busy ? "…" : "Maak admin"}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
           </>
