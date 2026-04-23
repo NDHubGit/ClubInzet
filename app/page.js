@@ -429,20 +429,30 @@ export default function HomePage() {
         <button type="button" style={btnGhost} onClick={signOut}>
           Uitloggen
         </button>
-        <a
-          href="/privacy"
-          style={{
-            display: "block",
-            textAlign: "center",
-            marginTop: 12,
-            color: "rgba(148,163,184,0.9)",
-            fontSize: 13,
-            textDecoration: "underline",
-            textUnderlineOffset: 4,
-          }}
-        >
-          Privacy
-        </a>
+        <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 12 }}>
+          <a
+            href="/privacy"
+            style={{
+              color: "rgba(148,163,184,0.9)",
+              fontSize: 13,
+              textDecoration: "underline",
+              textUnderlineOffset: 4,
+            }}
+          >
+            Privacy
+          </a>
+          <a
+            href="/voorwaarden"
+            style={{
+              color: "rgba(148,163,184,0.9)",
+              fontSize: 13,
+              textDecoration: "underline",
+              textUnderlineOffset: 4,
+            }}
+          >
+            Voorwaarden
+          </a>
+        </div>
         <a
           href="/admin"
           style={{ display: "block", textAlign: "center", marginTop: 14, color: "#94a3b8", fontSize: 13 }}

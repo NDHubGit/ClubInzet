@@ -284,12 +284,18 @@ export default function LoginPage() {
           )}
         </p>
 
-        <div className="mt-8 flex justify-center">
+        <div className="mt-8 flex justify-center gap-4">
           <Link
             href="/privacy"
             className="text-xs font-semibold text-slate-300/80 hover:text-slate-100 underline underline-offset-4"
           >
             Privacy
+          </Link>
+          <Link
+            href="/voorwaarden"
+            className="text-xs font-semibold text-slate-300/80 hover:text-slate-100 underline underline-offset-4"
+          >
+            Voorwaarden
           </Link>
         </div>
       </div>
