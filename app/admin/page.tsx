@@ -70,5 +70,23 @@ export default function AdminPage() {
     );
   }
 
-  return <AdminDashboard me={me} />;
+  return (
+    <div style={shell}>
+      <AdminDashboard me={me} />
+      <a
+        href="mailto:clubinzet@doodkorte.com?subject=Feedback%20ClubInzet&body=Wat%20ging%20goed%3F%0AWat%20was%20onduidelijk%3F%0AWat%20kan%20beter%3F"
+        style={{
+          display: "block",
+          marginTop: 18,
+          textAlign: "center",
+          color: "rgba(148,163,184,0.9)",
+          fontSize: 13,
+          textDecoration: "underline",
+          textUnderlineOffset: 4,
+        }}
+      >
+        💬 Feedback geven
+      </a>
+    </div>
+  );
 }

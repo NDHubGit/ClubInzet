@@ -298,6 +298,13 @@ export default function LoginPage() {
             Voorwaarden
           </Link>
         </div>
+
+        <a
+          href="mailto:clubinzet@doodkorte.com?subject=Feedback%20ClubInzet&body=Wat%20ging%20goed%3F%0AWat%20was%20onduidelijk%3F%0AWat%20kan%20beter%3F"
+          className="block mt-6 text-center text-xs font-semibold text-slate-300/80 underline underline-offset-4 hover:text-slate-100 hover:opacity-80"
+        >
+          💬 Feedback geven
+        </a>
       </div>
     </div>
   );
