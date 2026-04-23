@@ -173,6 +173,7 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
   const router = useRouter();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [profilesMap, setProfilesMap] = useState(() => new Map<string, ProfileRow>());
+  const [allProfiles, setAllProfiles] = useState<ProfileRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [planningMsg, setPlanningMsg] = useState<string | null>(null);
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
@@ -278,10 +279,14 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
   const isAdmin = effectiveRole.toLowerCase() === "admin";
 
   const allProfilesSorted = useMemo(() => {
-    const list = Array.from(profilesMap.values());
-    list.sort((a, b) => adminMemberDisplayName(profilesMap, a.id).localeCompare(adminMemberDisplayName(profilesMap, b.id), "nl", { sensitivity: "base" }));
+    const list = [...allProfiles];
+    list.sort((a, b) => {
+      const an = adminMemberDisplayName(profilesMap, a.id);
+      const bn = adminMemberDisplayName(profilesMap, b.id);
+      return an.localeCompare(bn, "nl", { sensitivity: "base" });
+    });
     return list;
-  }, [profilesMap]);
+  }, [allProfiles, profilesMap]);
 
   /**
    * Eén token + parallel fetch: zelfde auth-context als `AdminTaskTypesPanel` (getUser → sessietoken).
@@ -306,9 +311,10 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
       const q = new URLSearchParams();
       q.set("status", "pending");
       q.set("source", "manual");
-      const [mRes, rRes] = await Promise.all([
+      const [mRes, rRes, pRes] = await Promise.all([
         fetch("/api/admin/members-summary", init),
         fetch(`/api/admin/review-tasks?${q.toString()}`, init),
+        fetch("/api/admin/profiles", init),
       ]);
 
       const mj = (await mRes.json().catch(() => ({}))) as {
@@ -343,12 +349,31 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
           return next;
         });
       }
+
+      const pj = (await pRes.json().catch(() => ({}))) as { profiles?: ProfileRow[]; error?: string; message?: string };
+      if (!pRes.ok) {
+        // Niet hard-failen; andere slices kunnen nog werken.
+        console.error("[admin/profiles]", pj.error || pj.message || pRes.statusText);
+        setAllProfiles([]);
+      } else {
+        const list = Array.isArray(pj.profiles) ? (pj.profiles as ProfileRow[]) : [];
+        setAllProfiles(list);
+        // Vul/overschrijf map met volledige serverlijst (RLS-proof), zodat labels overal kloppen.
+        setProfilesMap(() => {
+          const m = new Map<string, ProfileRow>();
+          for (const p of list) {
+            if (p?.id) m.set(String(p.id), p);
+          }
+          return m;
+        });
+      }
     } catch (e) {
       console.error("[loadAdminDashboardSlices]", e);
       setMemberSummaryError("Kon ledenoverzicht niet laden.");
       setReviewTasksError("Kon te beoordelen taken niet laden.");
       setMemberRows([]);
       setReviewTasks([]);
+      setAllProfiles([]);
     } finally {
       setMemberSummaryLoading(false);
       setReviewLoading(false);
@@ -526,6 +551,7 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(j.error || res.statusText);
       await reload();
+      await refreshAdminSlices();
       router.refresh();
       setRoleMsg("Rollen bijgewerkt.");
     } catch (e: unknown) {
