@@ -178,6 +178,8 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
   const [planningMsg, setPlanningMsg] = useState<string | null>(null);
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
   const [roleMsg, setRoleMsg] = useState<string | null>(null);
+  const [rolesProfilesError, setRolesProfilesError] = useState<string | null>(null);
+  const [rolesProfilesStatus, setRolesProfilesStatus] = useState<number | null>(null);
   const [taskActionBusy, setTaskActionBusy] = useState<string | null>(null);
   const [manualReviewBusy, setManualReviewBusy] = useState<string | null>(null);
   const [pointsSaveBusy, setPointsSaveBusy] = useState<string | null>(null);
@@ -296,14 +298,19 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
     setReviewLoading(true);
     setMemberSummaryError(null);
     setReviewTasksError(null);
+    setRolesProfilesError(null);
+    setRolesProfilesStatus(null);
     try {
       const token = await getAccessTokenForAdminRoutes();
       if (!token) {
         const msg = "Geen geldige sessie voor admin-API. Vernieuw de pagina of log opnieuw in.";
         setMemberSummaryError(msg);
         setReviewTasksError(msg);
+        setRolesProfilesError(msg);
+        setRolesProfilesStatus(401);
         setMemberRows([]);
         setReviewTasks([]);
+        setAllProfiles([]);
         return;
       }
       const headers = new Headers({ Authorization: `Bearer ${token}` });
@@ -353,10 +360,22 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
       const pj = (await pRes.json().catch(() => ({}))) as { profiles?: ProfileRow[]; error?: string; message?: string };
       if (!pRes.ok) {
         // Niet hard-failen; andere slices kunnen nog werken.
-        console.error("[admin/profiles]", pj.error || pj.message || pRes.statusText);
+        console.error("[admin/profiles]", {
+          status: pRes.status,
+          statusText: pRes.statusText,
+          body: pj,
+        });
+        setRolesProfilesStatus(pRes.status);
+        setRolesProfilesError(adminApiSliceErrorMessage(pRes, pj));
         setAllProfiles([]);
       } else {
         const list = Array.isArray(pj.profiles) ? (pj.profiles as ProfileRow[]) : [];
+        if (process.env.NODE_ENV === "development") {
+          console.info("[admin/profiles] ok", { count: list.length });
+        }
+        if (list.length === 0) {
+          console.warn("[admin/profiles] lege lijst (unexpected)", { body: pj });
+        }
         setAllProfiles(list);
         // Vul/overschrijf map met volledige serverlijst (RLS-proof), zodat labels overal kloppen.
         setProfilesMap(() => {
@@ -371,6 +390,7 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
       console.error("[loadAdminDashboardSlices]", e);
       setMemberSummaryError("Kon ledenoverzicht niet laden.");
       setReviewTasksError("Kon te beoordelen taken niet laden.");
+      setRolesProfilesError("Kon profielenlijst niet laden.");
       setMemberRows([]);
       setReviewTasks([]);
       setAllProfiles([]);
@@ -1093,6 +1113,28 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
               {roleMsg ? (
                 <p style={{ margin: "0 0 10px", fontSize: 13, color: "#e2e8f0", opacity: 0.9 }}>{roleMsg}</p>
               ) : null}
+              {rolesProfilesError ? (
+                <p style={{ margin: "0 0 10px", fontSize: 13, color: "#fca5a5", lineHeight: 1.45 }}>
+                  {rolesProfilesError}
+                  {rolesProfilesStatus ? (
+                    <span style={{ opacity: 0.85 }}>{` (status ${rolesProfilesStatus})`}</span>
+                  ) : null}
+                </p>
+              ) : null}
+              {allProfilesSorted.length === 0 ? (
+                <div style={{ padding: "10px 0" }}>
+                  <p style={{ margin: 0, opacity: 0.85, fontSize: 13 }}>
+                    Geen profielen geladen voor dit onderdeel.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void refreshAdminSlices()}
+                    style={{ ...btnGhost, padding: "8px 12px", fontSize: 12, width: "auto", marginTop: 10 }}
+                  >
+                    Opnieuw laden
+                  </button>
+                </div>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-0 border-collapse text-[13px] text-slate-200 sm:min-w-[640px]">
                   <thead>
@@ -1159,6 +1201,7 @@ export default function AdminDashboard({ me }: AdminDashboardProps) {
                   </tbody>
                 </table>
               </div>
+              )}
             </section>
 
           </>
