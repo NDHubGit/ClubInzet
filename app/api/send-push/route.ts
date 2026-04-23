@@ -28,11 +28,10 @@ export async function POST(request: Request) {
   }
   const { user } = auth;
 
-  if (process.env.PUSH_REQUIRE_ADMIN === "true") {
-    const adminOk = await isUserAdmin(user.id);
-    if (!adminOk) {
-      return NextResponse.json({ error: "Forbidden — alleen admin (PUSH_REQUIRE_ADMIN)" }, { status: 403 });
-    }
+  // Altijd admin: endpoint gebruikt service_role + kan pushen naar willekeurige userId.
+  const adminOk = await isUserAdmin(user.id);
+  if (!adminOk) {
+    return NextResponse.json({ error: "Forbidden — alleen admin" }, { status: 403 });
   }
 
   let body: Body;

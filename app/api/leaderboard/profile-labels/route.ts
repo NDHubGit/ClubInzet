@@ -44,5 +44,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ profiles: data ?? [] });
+  // Privacy: stuur geen volledige e-mail terug; alleen local part als fallback voor naam.
+  const profiles = (data ?? []).map((p) => {
+    const row = p as {
+      id: string;
+      email?: string | null;
+      name?: string | null;
+      display_name?: string | null;
+      first_name?: string | null;
+      last_name?: string | null;
+    };
+    const em = String(row.email ?? "").trim();
+    const at = em.indexOf("@");
+    const email_local = at > 0 ? em.slice(0, at).trim() || null : null;
+    return {
+      id: row.id,
+      name: row.name ?? null,
+      display_name: row.display_name ?? null,
+      first_name: row.first_name ?? null,
+      last_name: row.last_name ?? null,
+      email_local,
+    };
+  });
+
+  return NextResponse.json({ profiles });
 }

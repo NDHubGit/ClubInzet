@@ -2,7 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type LeaderboardProfileRow = {
   id: string;
-  email?: string | null;
+  /** Alleen local-part; geen volledige e-mail in responses. */
+  email_local?: string | null;
   name?: string | null;
   display_name?: string | null;
   first_name?: string | null;

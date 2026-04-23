@@ -3,14 +3,13 @@
  * `email` mag intern gebruikt worden om een prefix (voor @) af te leiden.
  */
 
-import { displayNameForProfile } from "@/lib/admin/aggregateMembers";
-
 export type ProfileLike = {
   id?: string | null;
   /** Optioneel apart veld; anders display_name / e-mailprefix */
   name?: string | null;
   display_name?: string | null;
-  email?: string | null;
+  /** Alleen local-part (prefix vóór @) voor privacy. */
+  email_local?: string | null;
   first_name?: string | null;
   last_name?: string | null;
 };
@@ -34,9 +33,9 @@ export function resolveProfilePublicName(profile: ProfileLike | null | undefined
   const full = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim();
   if (full) return capitalizeFirst(full);
 
-  const em = profile.email;
-  if (em && String(em).includes("@")) {
-    return capitalizeFirst(String(em).split("@")[0]);
+  const emLocal = profile.email_local;
+  if (emLocal && String(emLocal).trim()) {
+    return capitalizeFirst(String(emLocal));
   }
 
   return "Gebruiker";
@@ -75,15 +74,14 @@ export function leaderboardParticipantName(
   profile: ProfileLike | null | undefined,
   currentUserId: string | null | undefined
 ): string {
-  const raw = displayNameForProfile({
-    id: String(profile?.id ?? ""),
-    email: profile?.email ?? null,
-    name: profile?.name ?? null,
-    display_name: profile?.display_name ?? null,
-    first_name: profile?.first_name ?? null,
-    last_name: profile?.last_name ?? null,
-  });
-  const base = raw === "Onbekend" ? "Gebruiker" : raw;
+  // Zelfde prioriteit als admin:
+  // 1) display_name, 2) email local-part, 3) "Gebruiker"
+  const dn = profile?.display_name?.trim();
+  const base = dn
+    ? capitalizeFirst(dn)
+    : profile?.email_local && String(profile.email_local).trim()
+      ? capitalizeFirst(String(profile.email_local))
+      : "Gebruiker";
   if (
     profile?.id != null &&
     currentUserId != null &&

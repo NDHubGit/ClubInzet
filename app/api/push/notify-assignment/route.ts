@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getRequestUser } from "@/lib/auth/getRequestUser";
+import { isUserAdmin } from "@/lib/auth/isAdmin";
 import { sendPush } from "@/lib/notifications/sendPush";
 import { getSupabaseServiceRole } from "@/lib/supabase/admin";
 
@@ -18,6 +19,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
   }
   const { user } = auth;
+  const adminOk = await isUserAdmin(user.id);
+  if (!adminOk) {
+    return NextResponse.json({ error: "Forbidden — alleen admin" }, { status: 403 });
+  }
 
   let body: Body;
   try {

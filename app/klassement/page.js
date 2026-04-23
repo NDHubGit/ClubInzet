@@ -37,12 +37,15 @@ export default function KlassementPage() {
       return;
     }
     const prof = ensured.profile;
+    const emailLocal = (prof.email ?? u.email ?? "").includes("@")
+      ? String(prof.email ?? u.email ?? "").split("@")[0]
+      : null;
     setUser({
       id: u.id,
       email: u.email || "",
       profile: {
         id: prof.id,
-        email: prof.email ?? u.email ?? null,
+        email_local: emailLocal,
         display_name: prof.display_name ?? null,
         name: prof.name ?? null,
       },

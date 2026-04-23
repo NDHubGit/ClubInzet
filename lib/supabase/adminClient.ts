@@ -34,8 +34,7 @@ export function getAdminClient(): SupabaseClient {
     console.log("[admin-auth-debug] adminClient env", {
       hasUrl: Boolean(url),
       hasServiceRoleKey: Boolean(key),
-      keyLength: key?.length ?? 0,
-      keyPrefix: key ? `${key.slice(0, 6)}...` : null,
+      // Nooit key (of delen/metadata) loggen: kan in platform logs lekken.
     });
   }
 

@@ -1,6 +1,7 @@
 const defaultCache = require("next-pwa/cache");
 
-const withPWA = require("next-pwa")({
+// next-pwa vX: factory returns a config object (not a wrapper function).
+const pwaConfig = require("next-pwa")({
   dest: "public",
   register: true,
   skipWaiting: true,
@@ -37,4 +38,12 @@ const nextConfig = {
   allowedDevOrigins: ["192.168.68.76"],
 };
 
-module.exports = withPWA(nextConfig);
+module.exports = {
+  ...nextConfig,
+  // next-pwa injecteert via webpack; voorkom onbekende next.config keys door pwaConfig niet te spreaden.
+  webpack: (...args) => {
+    const [config, options] = args;
+    const base = typeof nextConfig.webpack === "function" ? nextConfig.webpack(config, options) : config;
+    return typeof pwaConfig.webpack === "function" ? pwaConfig.webpack(base, options) : base;
+  },
+};
